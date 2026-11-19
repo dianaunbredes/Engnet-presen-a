@@ -1,7 +1,9 @@
-import {Controller, Get, Param, Post, Put, Body, Delete} from '@nestjs/common';
+import {Controller, Get, Param, Post, Put, Body, Delete, UseGuards} from '@nestjs/common';
 import { TurmasService } from './turmas.service';
 import { Turma } from './entity/turmas.entity';
+import { JwtAuthGuard } from '../auth/jwt=auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('turmas')
 export class TurmasController {
     constructor(private turmasService: TurmasService) {}
