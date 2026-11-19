@@ -16,7 +16,8 @@ export class AuthService {
         if (!usuario || !usuario.ativo) {
             throw new UnauthorizedException('Email ou senha incorretos');
         }
-
+        console.log('Senha recebida:', senha);
+        console.log('Senha do banco:', usuario.senha_hash);
         // Compara a senha
         if (senha !== usuario.senha_hash) {
             throw new UnauthorizedException('Email ou senha incorretos');

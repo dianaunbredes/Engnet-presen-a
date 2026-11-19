@@ -1,7 +1,11 @@
 import {Controller, Get, Post, Body, Param, Delete, Put} from '@nestjs/common';
 import { AulasService } from './aulas.service';
 import { Aula } from './entity/aulas.entity';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+
+@UseGuards(JwtAuthGuard)
 @Controller('aulas')
 export class AulasController {
     @Get()

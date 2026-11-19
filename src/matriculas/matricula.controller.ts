@@ -1,7 +1,10 @@
 import {Get, Param, Post, Put, Body, Delete, Controller} from '@nestjs/common';
 import { MatriculasService } from './matricula.service';
 import { Matricula } from './entity/matricula.entity';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('matriculas')
 export class MatriculasController {
     constructor(private matriculasService: MatriculasService) {}
