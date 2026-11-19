@@ -2,8 +2,9 @@ import {Entity,PrimaryGeneratedColumn,Column, CreateDateColumn, ManyToOne,OneToM
 import {Aluno} from '../../alunos/entity/alunos.entity';
 import {Aula} from '../../aulas/entity/aulas.entity';
 import {Usuario} from '../../usuarios/entity/usuarios.entity';
-import { join } from 'path';
+import { Unique } from 'typeorm';
 
+@Unique(['aula_id', 'aluno_id'])
 @Entity('presencas')
 export class Presenca {
     @PrimaryGeneratedColumn('uuid')
@@ -26,8 +27,8 @@ export class Presenca {
     @CreateDateColumn({ type: 'timestamp'})
     registrado_em: Date;
 
-    @Column('text')
-    observacao: string;
+    @Column('text', { nullable: true })
+    observacao: string | null;
 
     @ManyToOne(() => Aluno, aluno => aluno.presencas)
     @JoinColumn({ name: 'aluno_id' })

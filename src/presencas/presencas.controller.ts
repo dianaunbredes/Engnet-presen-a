@@ -1,31 +1,59 @@
-import {Controller, Get, Post, Body, Param, Delete, Put, UseGuards} from '@nestjs/common';
+import {Controller,Post,Body,Request,UseGuards,Get,Put,Param} from '@nestjs/common';
 import { PresencasService } from './presencas.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import type { Request as ExpressRequest } from 'express';
+import { UnauthorizedException } from '@nestjs/common';
+import { CriarPresencaDto } from './dto/criar-presencas.dto';
 
+interface UsuarioAutenticado {
+  id: string;
+  email: string;
+  perfil: string;
+}
 
-@UseGuards(JwtAuthGuard)
 @Controller('presencas')
+@UseGuards(JwtAuthGuard)
 export class PresencasController {
-  constructor(private readonly presencasService: PresencasService) {}
-
     @Get()
-        findAllpresencas() {
-            return this.presencasService.findAllpresencas();
-        }
-    @Get(':id')
-        findPresencaId(@Param('id') id: string) {
-            return this.presencasService.findPresencaId(id);
-        }
-    @Post()
-        createPresenca(@Body() presenca: any) {
-            return this.presencasService.createPresenca(presenca);
-        }
-    @Put(':id')
-        updatePresenca(@Param('id') id: string, @Body() presenca: any) {
-            return this.presencasService.updatePresenca(id, presenca);
-        }
-    @Delete(':id')
-        removePresenca(@Param('id') id: string) {
-            return this.presencasService.deletePresenca(id);
-        }
+    getAll() {
+    return this.presencasService.getAllPresencas();
+    }
+  constructor(
+    private readonly presencasService: PresencasService,
+  ) {}
+
+  @Post()
+  create(
+  @Body() dados: CriarPresencaDto,
+  @Request() req: ExpressRequest,
+    ) {
+    const usuario = req.user as UsuarioAutenticado;
+
+    if (!usuario) {
+    throw new UnauthorizedException('Usuário não autenticado.');
+    }
+
+    return this.presencasService.createPresenca(
+    dados,
+    usuario.id,
+    );
+}
+@Put(':id')
+update(
+  @Param('id') id: string,
+  @Body() dados: CriarPresencaDto,
+  @Request() req: ExpressRequest,
+) {
+  const usuario = req.user as UsuarioAutenticado;
+
+  if (!usuario) {
+    throw new UnauthorizedException('Usuário não autenticado.');
+  }
+
+  return this.presencasService.updatePresenca(
+    id,
+    dados,
+    usuario.id,
+  );
+}
 }

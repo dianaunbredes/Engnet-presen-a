@@ -1,6 +1,4 @@
 import {Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany} from 'typeorm';
-import { Turma } from '../../turmas/entity/turmas.entity';
-import { Aluno } from '../../alunos/entity/alunos.entity';
 import { Presenca } from '../../presencas/entity/presencas.entity';
 
 @Entity('aulas')

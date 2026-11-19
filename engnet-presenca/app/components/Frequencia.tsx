@@ -1,24 +1,34 @@
 
 "use client";
 
-import { useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
-import type { Aluno, Turma, Chamada } from "../page";
+import { useEffect, useMemo, useState } from "react";
+import type { Aluno, Turma, Aula, Presenca } from "../page";
+
+type StatusPresenca =
+  | "presente"
+  | "falta"
+  | "justificada"
+  | "nao_registrado";
+
+type RegistroLocal = {
+  alunoId: string;
+  status: StatusPresenca;
+};
 
 type Props = {
   alunos: Aluno[];
   turmas: Turma[];
-  chamadas: Chamada[];
-  setChamadas: Dispatch<SetStateAction<Chamada[]>>;
+  aulas: Aula[];
+  presencas: Presenca[];
+  atualizarPresencas: () => Promise<void>;
 };
 
-function obterDataLocal() {
-  const start = performance.now() ? new Date(performance.now()) : new Date();
-  const timezoneOffset = start.getTimezoneOffset() * 60000;
-  const hoje = new Date(start.getTime() - timezoneOffset);
-  const ano = hoje.getFullYear();
-  const mes = String(hoje.getMonth() + 1).padStart(2, "0");
-  const dia = String(hoje.getDate()).padStart(2, "0");
+function formatarDataLocal(dataISO: string): string {
+  const data = new Date(dataISO);
+
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, "0");
+  const dia = String(data.getDate()).padStart(2, "0");
 
   return `${ano}-${mes}-${dia}`;
 }
@@ -26,48 +36,78 @@ function obterDataLocal() {
 export default function Frequencia({
   alunos,
   turmas,
-  chamadas,
-  setChamadas,
+  aulas,
+  presencas,
+  atualizarPresencas,
 }: Props) {
   const [turmaSelecionada, setTurmaSelecionada] = useState("");
-  const [data, setData] = useState(obterDataLocal);
+  const [data, setData] = useState("");
+  const [registros, setRegistros] = useState<RegistroLocal[]>([]);
+  const [salvando, setSalvando] = useState(false);
 
-  const [registros, setRegistros] = useState<
-    { alunoId: number; presente: boolean }[]
-  >([]);
-
-  const alunosDaTurma = alunos.filter(
-    (aluno) => aluno.turmaId === Number(turmaSelecionada)
+  const aulaSelecionada = aulas.find(
+    (aula) =>
+      aula.turma_id === turmaSelecionada &&
+      formatarDataLocal(aula.data_hora_inicio) === data
   );
 
-  function selecionarTurma(id: string) {
-    setTurmaSelecionada(id);
+  const alunosDaTurma = useMemo(
+    () => alunos.filter((aluno) => aluno.turmaId === turmaSelecionada),
+    [alunos, turmaSelecionada]
+  );
 
-    const alunosFiltrados = alunos.filter(
-      (aluno) => aluno.turmaId === Number(id)
+  // CARREGAR PRESENÇAS DO BANCO
+  useEffect(() => {
+    if (!aulaSelecionada) {
+      setRegistros([]);
+      return;
+    }
+
+    const presencasDaAula = presencas.filter(
+      (presenca) => presenca.aula_id === aulaSelecionada.id
     );
 
-    setRegistros(
-      alunosFiltrados.map((aluno) => ({
+    const novosRegistros: RegistroLocal[] = alunosDaTurma.map((aluno) => {
+      const presenca = presencasDaAula.find(
+        (item) => item.aluno_id === aluno.id
+      );
+
+      return {
         alunoId: aluno.id,
-        presente: false,
-      }))
-    );
-  }
+        status: presenca ? presenca.status : "nao_registrado",
+      };
+    });
 
-  function marcarPresenca(alunoId: number, presente: boolean) {
+    setRegistros(novosRegistros);
+  }, [aulaSelecionada, alunosDaTurma, presencas]);
+
+  // MARCAR PRESENÇA
+  function marcarPresenca(
+    alunoId: string,
+    status: StatusPresenca
+  ) {
     setRegistros((listaAtual) =>
       listaAtual.map((registro) =>
         registro.alunoId === alunoId
-          ? { ...registro, presente }
+          ? { ...registro, status }
           : registro
       )
     );
   }
 
-  function salvarChamada() {
+  // SALVAR CHAMADA NO BANCO DE DADOS
+  async function salvarChamada() {
+    if (salvando) return;
+
     if (!turmaSelecionada || !data) {
       alert("Selecione uma turma e uma data.");
+      return;
+    }
+
+    if (!aulaSelecionada) {
+      alert(
+        "Não existe uma aula cadastrada nesta data para a turma selecionada."
+      );
       return;
     }
 
@@ -76,39 +116,89 @@ export default function Frequencia({
       return;
     }
 
-    if (registros.length !== alunosDaTurma.length) {
-      alert("Confira a lista de alunos antes de salvar.");
+    if (
+      registros.length !== alunosDaTurma.length ||
+      registros.some(
+        (registro) => registro.status === "nao_registrado"
+      )
+    ) {
+      alert("Registre a situação de todos os alunos antes de salvar.");
       return;
     }
 
-    const chamadaExistente = chamadas.some(
-      (chamada) =>
-        chamada.turmaId === Number(turmaSelecionada) &&
-        chamada.data === data
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+    const token = sessionStorage.getItem("token");
+
+    if (!API_URL) {
+      alert("A URL da API não foi configurada.");
+      return;
+    }
+
+    if (!token) {
+      alert("Sessão expirada. Faça login novamente.");
+      return;
+    }
+
+    setSalvando(true);
+
+    try {
+      for (const registro of registros) {
+        const resposta = await fetch(`${API_URL}/presencas`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            aula_id: aulaSelecionada.id,
+            aluno_id: registro.alunoId,
+            status: registro.status,
+            observacao: null,
+          }),
+        });
+
+        if (!resposta.ok) {
+          const erro = await resposta.text();
+
+          console.error("Erro ao salvar presença:", {
+            status: resposta.status,
+            resposta: erro,
+            alunoId: registro.alunoId,
+          });
+
+          throw new Error("Falha ao salvar uma das presenças.");
+        }
+      }
+
+      await atualizarPresencas();
+
+      alert("Chamada salva no banco de dados com sucesso!");
+    } catch (erro) {
+      console.error("Erro completo ao salvar chamada:", erro);
+       alert(
+      erro instanceof Error
+      ? erro.message
+      : String(erro)
     );
+}
+}
 
-    if (chamadaExistente) {
-      alert("Já existe uma chamada registrada para esta turma e data.");
-      return;
-    }
-
-    const novaChamada: Chamada = {
-      id: Date.now(),
-      turmaId: Number(turmaSelecionada),
-      data,
-      registros,
-    };
-
-    setChamadas((listaAtual) => [...listaAtual, novaChamada]);
-
-    alert("Chamada salva com sucesso!");
-  }
-
+  // CONTADORES
   const presentes = registros.filter(
-    (registro) => registro.presente
+    (registro) => registro.status === "presente"
   ).length;
 
-  const ausentes = registros.length - presentes;
+  const ausentes = registros.filter(
+    (registro) => registro.status === "falta"
+  ).length;
+
+  const justificadas = registros.filter(
+    (registro) => registro.status === "justificada"
+  ).length;
+
+  const registrados = registros.filter(
+    (registro) => registro.status !== "nao_registrado"
+  ).length;
 
   return (
     <section className="rounded-xl border border-engnet-roxo bg-engnet-preto p-6">
@@ -117,14 +207,14 @@ export default function Frequencia({
       </h2>
 
       <p className="mt-1 text-sm text-gray-400">
-        Registre a presença dos alunos em cada aula.
+        Selecione uma turma e a data da aula para registrar a frequência.
       </p>
 
       {/* SELEÇÃO DE TURMA E DATA */}
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         <select
           value={turmaSelecionada}
-          onChange={(e) => selecionarTurma(e.target.value)}
+          onChange={(e) => setTurmaSelecionada(e.target.value)}
           className="rounded-lg border border-engnet-roxo bg-black px-4 py-3 text-white outline-none"
         >
           <option value="">Selecione uma turma</option>
@@ -144,13 +234,28 @@ export default function Frequencia({
         />
       </div>
 
+      {/* INFORMAÇÕES DA AULA */}
+      {turmaSelecionada && data && (
+        <div className="mt-6">
+          {aulaSelecionada ? (
+            <p className="text-sm text-green-400">
+              Aula encontrada: {aulaSelecionada.conteudo}
+            </p>
+          ) : (
+            <p className="text-sm text-yellow-400">
+              Nenhuma aula encontrada para esta turma nesta data.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* RESUMO */}
-      {turmaSelecionada && (
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+      {aulaSelecionada && (
+        <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
           <div className="rounded-lg bg-black p-4">
             <p className="text-sm text-gray-400">Total de alunos</p>
             <p className="mt-2 text-2xl font-bold text-white">
-              {registros.length}
+              {alunosDaTurma.length}
             </p>
           </div>
 
@@ -162,16 +267,23 @@ export default function Frequencia({
           </div>
 
           <div className="rounded-lg bg-black p-4">
-            <p className="text-sm text-gray-400">Ausentes</p>
+            <p className="text-sm text-gray-400">Faltas</p>
             <p className="mt-2 text-2xl font-bold text-red-400">
               {ausentes}
+            </p>
+          </div>
+
+          <div className="rounded-lg bg-black p-4">
+            <p className="text-sm text-gray-400">Justificadas</p>
+            <p className="mt-2 text-2xl font-bold text-yellow-400">
+              {justificadas}
             </p>
           </div>
         </div>
       )}
 
       {/* LISTA DE ALUNOS */}
-      {turmaSelecionada && (
+      {aulaSelecionada && (
         <div className="mt-8 overflow-x-auto">
           <table className="w-full text-left text-white">
             <thead>
@@ -200,13 +312,13 @@ export default function Frequencia({
                     </td>
 
                     <td className="p-4">
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           onClick={() =>
-                            marcarPresenca(aluno.id, true)
+                            marcarPresenca(aluno.id, "presente")
                           }
                           className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                            registro?.presente
+                            registro?.status === "presente"
                               ? "bg-green-600 text-white"
                               : "bg-gray-800 text-gray-300"
                           }`}
@@ -216,17 +328,36 @@ export default function Frequencia({
 
                         <button
                           onClick={() =>
-                            marcarPresenca(aluno.id, false)
+                            marcarPresenca(aluno.id, "falta")
                           }
                           className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                            registro && !registro.presente
+                            registro?.status === "falta"
                               ? "bg-red-600 text-white"
                               : "bg-gray-800 text-gray-300"
                           }`}
                         >
-                          Ausente
+                          Falta
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            marcarPresenca(aluno.id, "justificada")
+                          }
+                          className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                            registro?.status === "justificada"
+                              ? "bg-yellow-600 text-white"
+                              : "bg-gray-800 text-gray-300"
+                          }`}
+                        >
+                          Justificada
                         </button>
                       </div>
+
+                      {registro?.status === "nao_registrado" && (
+                        <p className="mt-2 text-xs text-gray-400">
+                          Ainda não registrado
+                        </p>
+                      )}
                     </td>
                   </tr>
                 );
@@ -247,63 +378,35 @@ export default function Frequencia({
         </div>
       )}
 
+      {/* PROGRESSO */}
+      {aulaSelecionada && alunosDaTurma.length > 0 && (
+        <p className="mt-4 text-sm text-gray-400">
+          {registrados} de {alunosDaTurma.length} alunos registrados.
+        </p>
+      )}
+
       {/* BOTÃO SALVAR */}
-      {turmaSelecionada && alunosDaTurma.length > 0 && (
+      {aulaSelecionada && alunosDaTurma.length > 0 && (
         <button
           onClick={salvarChamada}
-          className="mt-6 rounded-lg bg-engnet-laranja px-6 py-3 font-bold text-black hover:opacity-80"
+          disabled={salvando}
+          className={`mt-6 rounded-lg bg-engnet-laranja px-6 py-3 font-bold text-black ${
+            salvando
+              ? "cursor-not-allowed opacity-50"
+              : "hover:opacity-80"
+          }`}
         >
-          Salvar chamada
+          {salvando ? "Salvando chamada..." : "Salvar chamada"}
         </button>
       )}
 
-      {/* HISTÓRICO */}
+      {/* INFORMAÇÃO SOBRE ARMAZENAMENTO */}
       <div className="mt-10">
-        <h3 className="text-xl font-bold text-white">
-          Histórico de Chamadas
-        </h3>
-
-        <div className="mt-4 space-y-3">
-          {chamadas.map((chamada) => {
-            const turma = turmas.find(
-              (item) => item.id === chamada.turmaId
-            );
-
-            const totalPresentes = chamada.registros.filter(
-              (registro) => registro.presente
-            ).length;
-
-            return (
-              <div
-                key={chamada.id}
-                className="rounded-lg border border-gray-800 bg-black p-4"
-              >
-                <div className="flex flex-wrap justify-between gap-2">
-                  <div>
-                    <p className="font-bold text-white">
-                      {turma?.nome ?? "Turma não encontrada"}
-                    </p>
-
-                    <p className="text-sm text-gray-400">
-                      Data: {chamada.data}
-                    </p>
-                  </div>
-
-                  <p className="text-sm text-green-400">
-                    {totalPresentes}/{chamada.registros.length} presentes
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-
-          {chamadas.length === 0 && (
-            <p className="text-sm text-gray-400">
-              Nenhuma chamada registrada.
-            </p>
-          )}
-        </div>
+        <p className="text-sm text-gray-400">
+          As frequências registradas são armazenadas no banco de dados.
+        </p>
       </div>
     </section>
   );
 }
+

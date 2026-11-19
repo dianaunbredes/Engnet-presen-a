@@ -1,8 +1,6 @@
 import { Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { AlunosService } from './alunos.service';
 import { Body } from '@nestjs/common';
-import { Aluno } from './entity/alunos.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateAlunoDto } from './dto/create-aluno.dto';
 import { UpdateAlunoDto } from './dto/update-aluno.dto';

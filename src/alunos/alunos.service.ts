@@ -8,8 +8,25 @@ import { NotFoundException } from '@nestjs/common';
 
 @Injectable()
 export class AlunosService {
-    getAllAlunos() {
-        return this.alunosRepository.find();
+    async getAllAlunos() {
+    const alunos = await this.alunosRepository.find({
+        relations: {
+            matriculas: {
+                turma: true,
+            },
+        },
+    });
+
+    return alunos.map((aluno) => {
+        const matriculaAtiva = aluno.matriculas.find(
+            (matricula) => matricula.status === 'ativa',
+        );
+
+        return {
+            ...aluno,
+            turmaId: matriculaAtiva?.turma_id ?? null,
+        };
+    });
     }
     async getAlunoById(id: string) {
         const aluno = await this.alunosRepository.findOneBy({ id });
