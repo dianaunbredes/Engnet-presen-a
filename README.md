@@ -121,6 +121,7 @@ DB_DATABASE=nome_do_banco
 
 JWT_SECRET=sua_chave_secreta
 ```
+O sistema de tokens, foi uma parte bem interessante, onde o usuário não precisa colocar varias vezes suas credenciais 
 
 Substitua os valores de exemplo pelas informações correspondentes ao seu ambiente.
 
@@ -209,3 +210,6 @@ O script também disponibiliza visualizações para consultas de frequência, al
 ## Autores
 
 Projeto desenvolvido pela equipe Copas
+
+## Observações
+O integrante Rafael Aurélio, contou com ajuda da IA, no desenvolvimento do backend.
