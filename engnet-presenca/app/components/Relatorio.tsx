@@ -1,25 +1,27 @@
-
 "use client";
 
 import { useState } from "react";
 import type { Aluno, Turma } from "../page";
 
-type RegistroFrequencia = {
-  alunoId: number;
-  presente: boolean;
+type Presenca = {
+  id: string;
+  aula_id: string;
+  aluno_id: string;
+  status: "presente" | "falta" | "justificada";
+  registrado_em: string;
 };
 
-type Chamada = {
-  id: number;
-  turmaId: number;
-  data: string;
-  registros: RegistroFrequencia[];
+type Aula = {
+  id: string;
+  turma_id: string;
+  data_hora_inicio: string;
 };
 
 type Props = {
   alunos: Aluno[];
   turmas: Turma[];
-  chamadas: Chamada[];
+  presencas: Presenca[];
+  aulas: Aula[];
 };
 
 const LIMITE_FREQUENCIA = 75;
@@ -27,55 +29,93 @@ const LIMITE_FREQUENCIA = 75;
 export default function Relatorios({
   alunos,
   turmas,
-  chamadas,
+  presencas,
+  aulas,
 }: Props) {
   const [turmaSelecionada, setTurmaSelecionada] = useState("todas");
 
+  // Turmas e alunos considerados pelo filtro selecionado
   const alunosFiltrados = alunos.filter(
     (aluno) =>
       turmaSelecionada === "todas" ||
-      aluno.turmaId === Number(turmaSelecionada)
+      aluno.turmaId === turmaSelecionada
   );
 
-  const chamadasFiltradas = chamadas.filter(
-    (chamada) =>
+  const turmasFiltradas = turmas.filter(
+    (turma) =>
       turmaSelecionada === "todas" ||
-      chamada.turmaId === Number(turmaSelecionada)
+      turma.id === turmaSelecionada
   );
 
+  // Aulas pertencentes às turmas selecionadas
+  const aulasFiltradas = aulas.filter((aula) =>
+    turmaSelecionada === "todas"
+      ? true
+      : aula.turma_id === turmaSelecionada
+  );
+
+  const idsAulas = new Set(aulasFiltradas.map((aula) => aula.id));
+
+  // Presenças referentes às aulas selecionadas
+  const presencasFiltradas = presencas.filter((presenca) =>
+    idsAulas.has(presenca.aula_id)
+  );
+
+  // Calcula a frequência individual de um aluno
   function calcularFrequencia(aluno: Aluno) {
-    const registros = chamadas
-      .filter((chamada) => chamada.turmaId === aluno.turmaId)
-      .flatMap((chamada) => chamada.registros)
-      .filter((registro) => registro.alunoId === aluno.id);
+    const aulasDaTurma = aulas.filter(
+      (aula) => aula.turma_id === aluno.turmaId
+    );
+
+    const idsAulasAluno = new Set(
+      aulasDaTurma.map((aula) => aula.id)
+    );
+
+    const registros = presencas.filter(
+      (presenca) =>
+        presenca.aluno_id === aluno.id &&
+        idsAulasAluno.has(presenca.aula_id)
+    );
 
     const totalAulas = registros.length;
 
-    const presencas = registros.filter(
-      (registro) => registro.presente
+    const quantidadePresencas = registros.filter(
+      (registro) => registro.status === "presente"
     ).length;
 
-    const faltas = totalAulas - presencas;
+    const faltas = registros.filter(
+      (registro) => registro.status === "falta"
+    ).length;
+
+    const justificadas = registros.filter(
+      (registro) => registro.status === "justificada"
+    ).length;
 
     const percentual =
-      totalAulas > 0 ? (presencas / totalAulas) * 100 : null;
+      totalAulas > 0
+        ? (quantidadePresencas / totalAulas) * 100
+        : null;
 
-    return { totalAulas, presencas, faltas, percentual };
+    return {
+      totalAulas,
+      presencas: quantidadePresencas,
+      faltas,
+      justificadas,
+      percentual,
+    };
   }
 
-  const registrosGerais = chamadasFiltradas.flatMap(
-    (chamada) => chamada.registros
-  );
-
-  const totalPresencas = registrosGerais.filter(
-    (registro) => registro.presente
+  // Indicadores gerais
+  const totalPresencas = presencasFiltradas.filter(
+    (registro) => registro.status === "presente"
   ).length;
 
   const mediaFrequencia =
-    registrosGerais.length > 0
-      ? (totalPresencas / registrosGerais.length) * 100
+    presencasFiltradas.length > 0
+      ? (totalPresencas / presencasFiltradas.length) * 100
       : null;
 
+  // Alunos abaixo do limite de frequência
   const alunosEmAlerta = alunosFiltrados.filter((aluno) => {
     const resultado = calcularFrequencia(aluno);
 
@@ -128,7 +168,7 @@ export default function Relatorios({
         <div className="rounded-lg bg-black p-4">
           <p className="text-sm text-gray-400">Chamadas realizadas</p>
           <p className="mt-2 text-2xl font-bold text-white">
-            {chamadasFiltradas.length}
+            {aulasFiltradas.length}
           </p>
         </div>
 
@@ -157,6 +197,7 @@ export default function Relatorios({
                 <th className="p-3">Aulas</th>
                 <th className="p-3">Presenças</th>
                 <th className="p-3">Faltas</th>
+                <th className="p-3">Justificadas</th>
                 <th className="p-3">Frequência</th>
               </tr>
             </thead>
@@ -168,16 +209,27 @@ export default function Relatorios({
                 return (
                   <tr key={aluno.id} className="border-b border-gray-800">
                     <td className="p-3">{aluno.nome}</td>
+
                     <td className="p-3 text-gray-400">
                       {aluno.matricula}
                     </td>
-                    <td className="p-3">{resultado.totalAulas}</td>
+
+                    <td className="p-3">
+                      {resultado.totalAulas}
+                    </td>
+
                     <td className="p-3 text-green-400">
                       {resultado.presencas}
                     </td>
+
                     <td className="p-3 text-red-400">
                       {resultado.faltas}
                     </td>
+
+                    <td className="p-3 text-yellow-400">
+                      {resultado.justificadas}
+                    </td>
+
                     <td className="p-3">
                       {resultado.percentual === null ? (
                         <span className="text-gray-400">
@@ -201,7 +253,10 @@ export default function Relatorios({
 
               {alunosFiltrados.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-6 text-center text-gray-400">
+                  <td
+                    colSpan={7}
+                    className="p-6 text-center text-gray-400"
+                  >
                     Nenhum aluno cadastrado.
                   </td>
                 </tr>
@@ -236,6 +291,7 @@ export default function Relatorios({
               >
                 <div>
                   <p className="font-bold text-white">{aluno.nome}</p>
+
                   <p className="text-sm text-gray-400">
                     {turma?.nome} · Matrícula: {aluno.matricula}
                   </p>
@@ -245,6 +301,7 @@ export default function Relatorios({
                   <p className="font-bold text-red-400">
                     {resultado.percentual?.toFixed(1)}%
                   </p>
+
                   <p className="text-xs text-gray-400">
                     {resultado.faltas} falta(s)
                   </p>
@@ -279,47 +336,67 @@ export default function Relatorios({
             </thead>
 
             <tbody>
-              {turmas
-                .filter(
-                  (turma) =>
-                    turmaSelecionada === "todas" ||
-                    turma.id === Number(turmaSelecionada)
-                )
-                .map((turma) => {
-                  const chamadasTurma = chamadas.filter(
-                    (chamada) => chamada.turmaId === turma.id
-                  );
+              {turmasFiltradas.map((turma) => {
+                const aulasTurma = aulas.filter(
+                  (aula) => aula.turma_id === turma.id
+                );
 
-                  const registros = chamadasTurma.flatMap(
-                    (chamada) => chamada.registros
-                  );
+                const idsAulasTurma = new Set(
+                  aulasTurma.map((aula) => aula.id)
+                );
 
-                  const presencas = registros.filter(
-                    (registro) => registro.presente
-                  ).length;
+                const registros = presencas.filter(
+                  (presenca) =>
+                    idsAulasTurma.has(presenca.aula_id)
+                );
 
-                  const media =
-                    registros.length > 0
-                      ? (presencas / registros.length) * 100
-                      : null;
+                const quantidadePresencas = registros.filter(
+                  (registro) => registro.status === "presente"
+                ).length;
 
-                  const quantidadeAlunos = alunos.filter(
-                    (aluno) => aluno.turmaId === turma.id
-                  ).length;
+                const media =
+                  registros.length > 0
+                    ? (quantidadePresencas / registros.length) * 100
+                    : null;
 
-                  return (
-                    <tr key={turma.id} className="border-b border-gray-800">
-                      <td className="p-3">{turma.nome}</td>
-                      <td className="p-3">{quantidadeAlunos}</td>
-                      <td className="p-3">{chamadasTurma.length}</td>
-                      <td className="p-3 font-bold">
-                        {media !== null
-                          ? `${media.toFixed(1)}%`
-                          : "Sem registros"}
-                      </td>
-                    </tr>
-                  );
-                })}
+                const quantidadeAlunos = alunos.filter(
+                  (aluno) => aluno.turmaId === turma.id
+                ).length;
+
+                return (
+                  <tr
+                    key={turma.id}
+                    className="border-b border-gray-800"
+                  >
+                    <td className="p-3">{turma.nome}</td>
+
+                    <td className="p-3">
+                      {quantidadeAlunos}
+                    </td>
+
+                    <td className="p-3">
+                      {aulasTurma.length}
+                    </td>
+
+                    <td className="p-3 font-bold">
+                      {media !== null
+                        ? `${media.toFixed(1)}%`
+                        : "Sem registros"}
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {turmasFiltradas.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="p-6 text-center text-gray-400"
+                  >
+                    Nenhuma turma cadastrada.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

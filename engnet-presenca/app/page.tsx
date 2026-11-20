@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -11,7 +9,6 @@ import Turmas from "./components/Turmas";
 import Alunos from "./components/Alunos";
 import Frequencia from "./components/Frequencia";
 import Relatorios from "./components/Relatorio";
-import { resumeToPipeableStream } from "react-dom/server";
 
 export type Turma = {
   id: string;
@@ -39,10 +36,6 @@ export type Aula = {
   criada_em: string;
 };
 
-export type RegistroFrequencia = {
-  alunoId: number;
-  presente: boolean;
-};
 
 export type Presenca = {
   id: string;
@@ -68,12 +61,6 @@ export type Presenca = {
   };
 };
 
-export type Chamada = {
-  id: number;
-  turmaId: number;
-  data: string;
-  registros: RegistroFrequencia[];
-};
 
 export default function Home() {
   const router = useRouter();
@@ -82,7 +69,6 @@ export default function Home() {
   const [presencas, setPresencas] = useState<Presenca[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [alunos, setAlunos] = useState<Aluno[]>([]);
-  const [chamadas, setChamadas] = useState<Chamada[]>([]);
 
  
   useEffect(() => {
@@ -272,7 +258,14 @@ export default function Home() {
 
           <StatCard
             titulo="Média de frequência"
-            valor="87%"
+             valor={
+                presencas.length > 0
+                      ? `${(
+                (presencas.filter((p) => p.status === "presente").length /
+                  presencas.length) * 100
+                        ).toFixed(1)}%`
+                  : "Sem registros"
+                }
           />
         </div>
 
@@ -306,7 +299,8 @@ export default function Home() {
           <Relatorios
             alunos={alunos}
             turmas={turmas}
-            chamadas={chamadas}
+            presencas={presencas}
+            aulas={aulas}
           />
         </div>
 
