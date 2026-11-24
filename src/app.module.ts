@@ -27,6 +27,7 @@ import { AuthModule } from './auth/auth.module';
     database: configService.get<string>('DB_DATABASE'),
     autoLoadEntities: true,
     synchronize: false,
+    ssl:true,
     //Pega as informações do arquivo.env e configura o banco de dados de acordo com as informações do arquivo .env
   }),
 }),
